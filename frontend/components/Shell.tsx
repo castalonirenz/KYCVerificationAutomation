@@ -43,7 +43,7 @@ export function Shell({
             </p>
           </div>
           <div className="bg-[linear-gradient(to_bottom,#FE8303_0%,#FD5108_75%,#EE3D08_100%)] px-[13.6px] py-[8.16px] text-right">
-            <p className="font-charter-bold text-[40px] leading-[1.1] tracking-[-0.8px]">PwC</p>
+            {/* <p className="font-charter-bold text-[40px] leading-[1.1] tracking-[-0.8px]">PwC</p> */}
           </div>
         </div>
         <nav className="mt-[24px] flex flex-wrap gap-[8px]">
