@@ -158,7 +158,7 @@ class KycCaseController extends Controller
 
   public function roles(Request $request): JsonResponse
 {
-        dd($request->user());
+    
         
     $this->authorizePermission($request->user(), 'users.manage');
 
