@@ -156,12 +156,16 @@ class KycCaseController extends Controller
         return response()->json(['data' => ['message' => 'User deleted.']]);
     }
 
-    public function roles(Request $request): JsonResponse
-    {
-        $this->authorizePermission($request->user(), 'users.manage');
+  public function roles(Request $request): JsonResponse
+{
+        dd($request->user());
+        
+    $this->authorizePermission($request->user(), 'users.manage');
 
-        return response()->json(['data' => Role::latest()->get()]);
-    }
+    return response()->json([
+        'data' => Role::latest()->get()
+    ]);
+}
 
     public function storeRole(Request $request): JsonResponse
     {
@@ -375,10 +379,25 @@ class KycCaseController extends Controller
         ];
     }
 
-    private function authorizePermission(?User $user, string $permission): void
-    {
-        abort_unless($user?->loadMissing('roles')->hasPermission($permission), 403, 'This action requires administrator access.');
+    // private function authorizePermission(?User $user, string $permission): void
+    // {
+    //     abort_unless($user?->loadMissing('roles')->hasPermission($permission), 403, 'This action requires administrator access.');
+    // }
+
+private function authorizePermission(?User $user, string $permission): void
+{
+    if (!$user) {
+        abort(401, 'Unauthenticated.');
     }
+
+    $user->loadMissing('roles');
+
+    abort_unless(
+        $user->hasPermission($permission),
+        403,
+        'This action requires administrator access.'
+    );
+}
 
     /**
      * @return array<int, string>

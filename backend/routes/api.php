@@ -35,6 +35,14 @@ Route::prefix('v1')->group(function (): void {
         Route::get('/kyc/cases/{caseId}', [KycCaseController::class, 'show']);
         Route::post('/kyc/cases/{caseId}/actions', [KycCaseController::class, 'storeAction']);
     });
+
+    Route::get('/test-token', function () {
+    $user = \App\Models\User::first();
+
+    return [
+        'token' => $user->createToken('Postman')->accessToken
+    ];
+});
 });
 
 Route::options('/{any}', fn () => response('', 204))->where('any', '.*');

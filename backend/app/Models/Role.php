@@ -9,13 +9,12 @@ use Illuminate\Database\Eloquent\Relations\BelongsToMany;
 #[Fillable(['name', 'description', 'permissions'])]
 class Role extends Model
 {
-    protected function casts(): array
-    {
-        return [
-            'permissions' => 'array',
-        ];
-    }
-
+   protected function casts(): array
+{
+    return [
+        'permissions' => 'array',
+    ];
+}
     public function users(): BelongsToMany
     {
         return $this->belongsToMany(User::class)->withTimestamps();
