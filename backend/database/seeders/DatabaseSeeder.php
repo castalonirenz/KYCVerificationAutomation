@@ -7,6 +7,7 @@ use App\Models\User;
 use Illuminate\Database\Console\Seeds\WithoutModelEvents;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
+use Laravel\Passport\Client;
 
 class DatabaseSeeder extends Seeder
 {
@@ -17,6 +18,17 @@ class DatabaseSeeder extends Seeder
      */
     public function run(): void
     {
+        // Create personal access client for Passport token generation
+        Client::updateOrCreate(
+            ['name' => 'KYC Personal Access Client'],
+            [
+                'secret' => null,
+                'provider' => 'users',
+                'redirect_uris' => ['http://localhost'],
+                'grant_types' => ['personal_access'],
+                'revoked' => false,
+            ],
+        );
         $adminRole = Role::firstOrCreate(
             ['name' => 'System Administrator'],
             [

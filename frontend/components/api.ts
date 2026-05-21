@@ -34,9 +34,34 @@ export async function getJson<T>(endpoint: string, signal?: AbortSignal): Promis
 }
 
 export async function postJson<T>(endpoint: string, body: unknown): Promise<T> {
+  return sendJson<T>("POST", endpoint, body);
+}
+
+export async function putJson<T>(endpoint: string, body: unknown): Promise<T> {
+  return sendJson<T>("PUT", endpoint, body);
+}
+
+export async function deleteJson<T>(endpoint: string): Promise<T> {
   const token = typeof window !== "undefined" ? localStorage.getItem("passport_token") : null;
   const response = await fetch(`${API_BASE_URL}${endpoint}`, {
-    method: "POST",
+    method: "DELETE",
+    headers: {
+      Accept: "application/json",
+      ...(token ? { Authorization: `Bearer ${token}` } : {}),
+    },
+  });
+
+  if (!response.ok) {
+    throw new Error(`API request failed: ${endpoint}`);
+  }
+
+  return response.json();
+}
+
+async function sendJson<T>(method: "POST" | "PUT", endpoint: string, body: unknown): Promise<T> {
+  const token = typeof window !== "undefined" ? localStorage.getItem("passport_token") : null;
+  const response = await fetch(`${API_BASE_URL}${endpoint}`, {
+    method,
     headers: {
       Accept: "application/json",
       "Content-Type": "application/json",

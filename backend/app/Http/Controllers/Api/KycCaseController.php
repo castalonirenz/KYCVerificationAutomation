@@ -10,9 +10,7 @@ use App\Models\Role;
 use App\Models\User;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Facades\Hash;
-use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
 
 class KycCaseController extends Controller
@@ -24,12 +22,18 @@ class KycCaseController extends Controller
             'password' => ['required', 'string'],
         ]);
 
-        if (! Auth::attempt($credentials)) {
+        /** @var User|null $user */
+        $user = User::where('email', $credentials['email'])->with('roles')->first();
+
+        if (! $user || ! Hash::check($credentials['password'], $user->password)) {
             return response()->json(['message' => 'Invalid credentials.'], 401);
         }
 
-        /** @var User $user */
-        $user = User::where('email', $credentials['email'])->with('roles')->firstOrFail();
+        if ($user->status !== 'Active') {
+            return response()->json(['message' => 'This account is not active.'], 403);
+        }
+
+        $permissions = $this->userPermissions($user);
 
         return response()->json([
             'data' => [
@@ -71,13 +75,17 @@ class KycCaseController extends Controller
         return response()->json(['data' => ['message' => 'OTP verification endpoint is ready for your MFA provider.']]);
     }
 
-    public function users(): JsonResponse
+    public function users(Request $request): JsonResponse
     {
+        $this->authorizePermission($request->user(), 'users.manage');
+
         return response()->json(['data' => User::with('roles')->latest()->get()->map(fn (User $user) => $this->userResource($user))->values()]);
     }
 
     public function storeUser(Request $request): JsonResponse
     {
+        $this->authorizePermission($request->user(), 'users.manage');
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255'],
             'email' => ['required', 'email', 'max:255', 'unique:users,email'],
@@ -99,13 +107,66 @@ class KycCaseController extends Controller
         return response()->json(['data' => $this->userResource($user->load('roles'))], 201);
     }
 
-    public function roles(): JsonResponse
+    public function updateUser(Request $request, User $user): JsonResponse
     {
+        $this->authorizePermission($request->user(), 'users.manage');
+
+        $data = $request->validate([
+            'name' => ['sometimes', 'required', 'string', 'max:255'],
+            'email' => ['sometimes', 'required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'password' => ['nullable', 'string', 'min:8'],
+            'department' => ['nullable', 'string', 'max:255'],
+            'status' => ['sometimes', 'required', Rule::in(['Active', 'Disabled', 'Password reset required'])],
+            'mfa_enabled' => ['boolean'],
+            'role_ids' => ['array'],
+            'role_ids.*' => ['integer', 'exists:roles,id'],
+        ]);
+
+        $roleIds = $data['role_ids'] ?? null;
+        unset($data['role_ids']);
+
+        if (array_key_exists('password', $data)) {
+            if ($data['password'] === null || $data['password'] === '') {
+                unset($data['password']);
+            } else {
+                $data['password'] = Hash::make($data['password']);
+            }
+        }
+
+        $user->update($data);
+
+        if ($roleIds !== null) {
+            $user->roles()->sync($roleIds);
+        }
+
+        return response()->json(['data' => $this->userResource($user->fresh('roles'))]);
+    }
+
+    public function destroyUser(Request $request, User $user): JsonResponse
+    {
+        $this->authorizePermission($request->user(), 'users.manage');
+
+        if ($request->user()?->is($user)) {
+            return response()->json(['message' => 'You cannot delete your own account.'], 422);
+        }
+
+        $user->tokens()->update(['revoked' => true]);
+        $user->delete();
+
+        return response()->json(['data' => ['message' => 'User deleted.']]);
+    }
+
+    public function roles(Request $request): JsonResponse
+    {
+        $this->authorizePermission($request->user(), 'users.manage');
+
         return response()->json(['data' => Role::latest()->get()]);
     }
 
     public function storeRole(Request $request): JsonResponse
     {
+        $this->authorizePermission($request->user(), 'roles.manage');
+
         $data = $request->validate([
             'name' => ['required', 'string', 'max:255', 'unique:roles,name'],
             'description' => ['nullable', 'string', 'max:255'],
@@ -309,7 +370,26 @@ class KycCaseController extends Controller
             'status' => $user->status,
             'mfa_enabled' => $user->mfa_enabled,
             'roles' => $user->roles->pluck('name')->values()->all(),
+            'role_ids' => $user->roles->pluck('id')->values()->all(),
+            'permissions' => $this->userPermissions($user),
         ];
+    }
+
+    private function authorizePermission(?User $user, string $permission): void
+    {
+        abort_unless($user?->loadMissing('roles')->hasPermission($permission), 403, 'This action requires administrator access.');
+    }
+
+    /**
+     * @return array<int, string>
+     */
+    private function userPermissions(User $user): array
+    {
+        return $user->roles
+            ->flatMap(fn (Role $role) => $role->permissions ?? [])
+            ->unique()
+            ->values()
+            ->all();
     }
 
     private function clientResource(Client $client): array

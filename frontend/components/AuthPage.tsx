@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { useRouter } from "next/navigation";
 import { postJson } from "./api";
 
 type AuthPageProps = {
@@ -30,8 +31,9 @@ const copy = {
 
 export function AuthPage({ mode }: AuthPageProps) {
   const content = copy[mode];
-  const [email, setEmail] = useState("test@example.com");
-  const [password, setPassword] = useState("password");
+  const router = useRouter();
+  const [email, setEmail] = useState("admin@kyc.local");
+  const [password, setPassword] = useState("TempAdmin123!");
   const [otp, setOtp] = useState("123456");
   const [notice, setNotice] = useState("Ready");
 
@@ -45,6 +47,7 @@ export function AuthPage({ mode }: AuthPageProps) {
       });
       if (response.data.access_token) {
         localStorage.setItem("passport_token", response.data.access_token);
+        router.push("/access-management");
       }
       setNotice(response.data.message);
     } catch {

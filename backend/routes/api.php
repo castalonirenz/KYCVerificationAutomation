@@ -13,6 +13,9 @@ Route::prefix('v1')->group(function (): void {
         Route::post('/auth/logout', [KycCaseController::class, 'logout']);
         Route::get('/users', [KycCaseController::class, 'users']);
         Route::post('/users', [KycCaseController::class, 'storeUser']);
+        Route::put('/users/{user}', [KycCaseController::class, 'updateUser']);
+        Route::patch('/users/{user}', [KycCaseController::class, 'updateUser']);
+        Route::delete('/users/{user}', [KycCaseController::class, 'destroyUser']);
         Route::get('/roles', [KycCaseController::class, 'roles']);
         Route::post('/roles', [KycCaseController::class, 'storeRole']);
         Route::get('/clients', [KycCaseController::class, 'clients']);
