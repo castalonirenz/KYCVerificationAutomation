@@ -1,5 +1,5 @@
-import { ModulePage } from "../../components/ModulePage";
-import { clientsFallback } from "../../components/fallbacks";
+import { ModulePage } from "../../src/components/ModulePage";
+import { clientsFallback } from "../../src/components/fallbacks";
 
 export default function ClientsPage() {
   return (

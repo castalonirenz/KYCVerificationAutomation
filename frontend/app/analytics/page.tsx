@@ -1,5 +1,5 @@
-import { ModulePage } from "../../components/ModulePage";
-import { reportsFallback } from "../../components/fallbacks";
+import { ModulePage } from "../../src/components/ModulePage";
+import { reportsFallback } from "../../src/components/fallbacks";
 
 export default function AnalyticsPage() {
   return (

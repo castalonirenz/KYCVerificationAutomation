@@ -1,5 +1,5 @@
-import { ModulePage } from "../../../components/ModulePage";
-import { riskFallback } from "../../../components/fallbacks";
+import { ModulePage } from "../../../src/components/ModulePage";
+import { riskFallback } from "../../../src/components/fallbacks";
 
 export default function RiskDashboardPage() {
   return (

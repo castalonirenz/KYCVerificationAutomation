@@ -1,8 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { postJson } from "./api";
 import { Shell } from "./Shell";
+import { useCreateClientDraft } from "../lib/queries/clients";
 
 export function ClientCreatePage() {
   const [form, setForm] = useState({
@@ -16,14 +16,20 @@ export function ClientCreatePage() {
   });
   const [notice, setNotice] = useState("Ready");
 
+  const createDraft = useCreateClientDraft();
+
   async function submit() {
-    setNotice("Saving...");
+    setNotice("Saving draft...");
     try {
-      await postJson("/clients", form);
+      const res = await createDraft.mutateAsync({
+        type: form.type.toLowerCase(),
+        personalInfo: { firstName: form.name, email: form.email, phone: form.phone, country: form.country },
+      });
       setForm({ name: "", type: "Individual", email: "", phone: "", country: "", industry: "", relationship_manager: "" });
-      setNotice("Client created with a draft KYC case.");
-    } catch {
-      setNotice("Unable to create client. Sign in with the temporary admin first.");
+      setNotice(res?.draftId ? `Draft saved (${res.draftId})` : "Draft saved");
+    } catch (err) {
+      console.error(err);
+      setNotice("Unable to save draft. Please sign in or try again.");
     }
   }
 
@@ -55,7 +61,7 @@ export function ClientCreatePage() {
           ))}
         </div>
         <button onClick={submit} className="mt-[16px] h-[32.64px] bg-[#FFAA72] px-[13.6px] py-[8.16px] font-helvetica-medium text-[12.24px] leading-[1.4] text-[#1F0606]">
-          Create client
+          Save draft
         </button>
         <p className="mt-[12px] font-helvetica-regular text-[9.761px] leading-[1.4] text-[#626771]">{notice}</p>
       </section>

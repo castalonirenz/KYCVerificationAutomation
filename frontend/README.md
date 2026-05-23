@@ -34,3 +34,23 @@ You can check out [the Next.js GitHub repository](https://github.com/vercel/next
 The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
 
 Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+
+## Connecting the Frontend to the Backend
+
+This frontend expects a Laravel backend exposing a JSON API. Configure the API base URL with an env var in `frontend/.env.local`:
+
+```bash
+NEXT_PUBLIC_API_BASE_URL=http://localhost:8000/api/v1
+```
+
+Notes:
+- The project includes `frontend/components/api.ts` which reads `NEXT_PUBLIC_API_BASE_URL` and will attach an Authorization header when a `passport_token` exists in `localStorage`.
+- Recommended auth flow: `POST /auth/login` → receive `{ access_token, user }`, store token in memory and `localStorage` (or use httpOnly cookies + refresh token). Implement token refresh on 401 responses.
+- Ensure CORS and cookie settings are configured on the Laravel backend for local development.
+
+Design & Interaction recommendations:
+- Use `shadcn/ui` + Tailwind for a modern baseline. Add `framer-motion` for smooth transitions and micro-interactions.
+- Use accessible primitives (Headless UI or Radix) for dialogs, dropdowns and lists.
+- Lazy-load heavy components (charts, document preview) with dynamic imports and Suspense.
+
+For a full frontend build guide that maps features to routes, components, API hooks and design tokens, see `frontend/FRONTEND_BUILD_GUIDE.md`.

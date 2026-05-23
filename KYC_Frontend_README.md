@@ -85,25 +85,30 @@ npx shadcn-ui@latest add button input label card badge dialog sheet table tabs s
 
 ## 2. Project Structure
 
-Create the following folder structure exactly:
+Modernized, more granular structure that supports Next.js App Router, atomic components, and co-located feature UI:
 
 ```
 src/
-├── app/
-│   ├── (auth)/
+├── app/                                 ← Next.js App Router (server + client components)
+│   ├── (auth)/                          ← unauthenticated routes (layout isolation)
 │   │   ├── login/page.tsx
 │   │   └── forgot-password/page.tsx
-│   ├── (dashboard)/
-│   │   ├── layout.tsx                  ← App shell with sidebar
+│   ├── (dashboard)/                     ← authenticated app shell (sidebar/topbar)
+│   │   ├── layout.tsx                   ← App shell with sidebar/topbar
 │   │   ├── dashboard/page.tsx
 │   │   ├── users/
 │   │   │   ├── page.tsx
-│   │   │   └── [id]/page.tsx
-│   │   ├── clients/
-│   │   │   ├── page.tsx
-│   │   │   ├── new/page.tsx
 │   │   │   └── [id]/
-│   │   │       ├── page.tsx
+│   │   │       ├── layout.tsx           ← client-level layout (tabs)
+│   │   │       └── overview/page.tsx
+│   │   ├── clients/
+│   │   │   ├── page.tsx                 ← clients list
+│   │   │   ├── new/
+│   │   │   │   ├── page.tsx             ← multi-step client form (co-located steps)
+│   │   │   │   └── components/          ← step-specific small components
+│   │   │   └── [id]/
+│   │   │       ├── layout.tsx
+│   │   │       ├── overview/page.tsx
 │   │   │       ├── documents/page.tsx
 │   │   │       ├── risk/page.tsx
 │   │   │       ├── screening/page.tsx
@@ -120,12 +125,16 @@ src/
 │   │       ├── risk-rules/page.tsx
 │   │       ├── roles/page.tsx
 │   │       └── watchlists/page.tsx
-│   └── api/
+│   └── api/                             ← edge / server routes (if any)
 │       └── auth/[...nextauth]/route.ts
-├── components/
-│   ├── ui/                             ← shadcn/ui base components
-│   └── shared/                         ← Custom shared components
-├── modules/                            ← Feature-specific components
+├── components/                          ← high-level UI composition and atomic component folders
+│   ├── ui/                              ← shadcn/ui + Radix wrappers (buttons, inputs)
+│   ├── atomic/                          ← Atomic Design: atoms, molecules, organisms
+│   │   ├── atoms/
+│   │   ├── molecules/
+│   │   └── organisms/
+│   └── features/                        ← reusable feature components (charts, tables, forms)
+├── modules/                             ← feature entry points (thin wrappers that compose components + hooks)
 │   ├── auth/
 │   ├── dashboard/
 │   ├── users/
@@ -138,26 +147,24 @@ src/
 │   ├── notifications/
 │   └── reports/
 ├── lib/
-│   ├── api.ts                          ← Axios instance
-│   ├── auth.ts
+│   ├── apiClient.ts                     ← typed API client (axios + generated types / zod)
+│   ├── openapi/                         ← optionally store OpenAPI specs / codegen outputs
 │   ├── utils.ts
-│   └── validators/                     ← Zod schemas
-├── hooks/
-│   ├── useAuth.ts
-│   ├── usePermission.ts
-│   └── useDebounce.ts
-├── store/
-│   ├── authStore.ts
-│   ├── notificationStore.ts
-│   └── uiStore.ts
-└── types/
-    ├── user.ts
-    ├── client.ts
-    ├── document.ts
-    ├── risk.ts
-    ├── workflow.ts
-    └── audit.ts
+│   └── validators/                      ← Zod schemas shared across frontend
+├── hooks/                               ← reusable hooks (useAuth, usePermission, useDebounce)
+├── store/                               ← Zustand stores (auth, ui, notifications)
+├── styles/
+│   ├── tokens.css                       ← design tokens / css variables
+│   └── globals.css
+├── types/                               ← shared TypeScript types
+├── scripts/                             ← tooling (codegen, format, tests)
+└── tests/
 ```
+
+Notes:
+- Co-locate small, page-specific components under each page's `components/` folder to keep pages focused and easy to maintain.
+- Use `server` components for data fetching where possible and `client` components only for interactive UI.
+- Favor atomic design for the shared component library (`components/atomic`) so design tokens and small building blocks are easily composable.
 
 ---
 
@@ -270,68 +277,84 @@ export const loginSchema = z.object({
 
 **Build the following UI:**
 - Same card layout as login
-- Email input only
-- "Send Reset Link" button
-- Success state: shows confirmation message after submit
-- "Back to Login" link
+## 19. API Integration Layer
 
----
+### 19.1 Typed API Client — `src/lib/apiClient.ts`
 
-## 5. App Shell & Navigation
+Use a typed API client (Axios + generated TypeScript types from the backend OpenAPI schema, or a zod-validated client). This centralizes request/response shapes and keeps frontend types in sync with the backend.
 
-### 5.1 Dashboard Layout — `src/app/(dashboard)/layout.tsx`
+Implementation guidance:
+- Generate types from the backend OpenAPI spec (`openapi-typescript` or similar) into `src/lib/openapi/` and import them in `apiClient`.
+- `apiClient` responsibilities:
+  - Base URL from `NEXT_PUBLIC_API_URL`
+  - Attach `Authorization: Bearer <token>` to requests
+  - Automatic refresh-token flow (on 401, attempt refresh once; else clear auth and redirect)
+  - Central error handling that maps backend `error.code` to UI-friendly messages
+  - Optional response validation using Zod schemas for critical endpoints
+  - Support for request cancellation and upload progress callbacks
 
-Build a **sidebar + topbar** layout:
-
-**Sidebar (left, fixed, collapsible):**
-- Logo at top
-- Navigation items grouped by section:
-
-```
-MAIN
-  Dashboard               /dashboard
-  
-COMPLIANCE
-  Clients                 /clients
-  Documents               /documents
-  Risk Assessment         /risk
-  Compliance Screening    /screening
-  Workflows               /workflows
-
-MONITORING
-  Audit Trail             /audit
-  Notifications           /notifications
-  Reports                 /reports
-
-ADMIN (visible to Admin + Manager only)
-  Users                   /users
-  Settings                /settings
-  Risk Rules              /settings/risk-rules
-  Watchlists              /settings/watchlists
-  Roles & Permissions     /settings/roles
+```ts
+// src/lib/apiClient.ts (outline)
+// - typed request/response signatures
+// - interceptors for auth/refresh
+// - helper: apiClient.get<T>(url, opts): Promise<T>
 ```
 
-- Active route highlighted
-- Collapsible to icon-only mode (toggle button at bottom)
-- User avatar + name + role badge at bottom of sidebar
-- Logout button at bottom
+### 19.2 API Hooks (TanStack Query)
 
-**Topbar (top, fixed):**
-- Breadcrumb navigation (dynamic, based on current route)
-- Search bar (global search — clients, documents)
-- Notification bell icon with unread count badge → opens notification panel
-- User menu dropdown (Profile, Settings, Logout)
-- Theme toggle (light/dark)
+Create one hooks/queries file per feature under `src/lib/queries/` and use generated types for request/response payloads. Add these hooks (including newer flows introduced in the UI):
 
-**Main content area:**
-- Scrollable, padding applied
-- `<Suspense>` wrapper with skeleton fallback per page
+- `clients.ts`
+  - `useClients(filters)` — paginated client list
+  - `useClient(id)` — single client
+  - `useCreateClient()` — mutation (final submit)
+  - `useSaveClientDraft()` — mutation to save partial multi-step form
+  - `useCompleteClient()` — finalize/submit a draft
+  - `useUpdateClient()` — mutation
+  - `useDeleteClient()` — mutation
+
+- `documents.ts`
+  - `useDocuments(filters)` — document list
+  - `useUploadDocument()` — mutation with progress
+  - `useBulkUploadDocuments()` — bulk upload helper (multipart)
+  - `useDeleteDocument()` — mutation
+
+- `risk.ts`
+  - `useRiskAssessment(clientId)` — risk data (includes `riskBreakdown[]`)
+  - `useRequestRiskOverride()` — mutation
+
+- `screening.ts`
+  - `useScreeningResults(clientId)` — screening data
+  - `useRunScreening(clientId)` — mutation
+  - `useDismissHit()` — mutation
+
+- `workflows.ts`
+  - `useWorkflowQueue(filters)` — queue list
+  - `useAdvanceWorkflow()` — mutation
+  - `useApproveClient()` — mutation
+  - `useRejectClient()` — mutation
+  - `useEscalateClient()` — mutation
+
+- `audit.ts`
+  - `useAuditTrail(filters)` — paginated audit logs
+
+- `notifications.ts`
+  - `useNotifications()` — notification list (paginated)
+  - `useNotificationsStream()` — SSE / WebSocket subscription helper
+  - `useMarkNotificationRead()` — mutation
+
+- `reports.ts`
+  - `useGenerateReport(config)` — mutation, returns download URL
+
+- `users.ts`
+  - `useUsers(filters)` — user list
+  - `useCreateUser()` — mutation
+  - `useUpdateUser()` — mutation
+  - `useDeactivateUser()` — mutation
+
+Use `react-query` optimistic updates where appropriate (e.g., mark notification read), and centralize retry/refresh logic in the query client config.
 
 ---
-
-### 5.2 Route Guard
-
-Create `src/components/shared/RouteGuard.tsx`:
 - Wrap dashboard layout
 - Redirect unauthenticated users to `/login`
 - Check user role against allowed roles for each route
@@ -981,81 +1004,37 @@ Each cell: Toggle (allowed / denied)
 
 ---
 
+
 ## 17. Shared Components Library
 
-Build these reusable components in `src/components/shared/`:
+Structure the shared UI in `src/components/` using Atomic Design (atoms → molecules → organisms → templates).
+Use `class-variance-authority` + `tailwind-merge` for variant-driven styling and keep design tokens in `src/styles/tokens.css`.
 
-### 17.1 StatusBadge
-```tsx
-// Props: status: string, size?: 'sm' | 'md'
-// Uses getStatusColor() utility
-// Renders colored pill badge
+Suggested folders:
+
+```
+src/components/
+├── ui/                ← design-system primitives (shadcn / Radix wrappers)
+├── atomic/
+│   ├── atoms/
+│   ├── molecules/
+│   └── organisms/
+└── features/          ← larger composed widgets (DataGrid, ChartCard, CommandPalette)
 ```
 
-### 17.2 RiskBadge
-```tsx
-// Props: level: 'low' | 'medium' | 'high' | 'critical', showIcon?: boolean
-// Shows colored badge with optional risk icon
-```
+Core components to implement (concise API notes):
 
-### 17.3 DataTable
-```tsx
-// Props: columns, data, pagination, filters, loading, onRowClick
-// Wraps TanStack Table with pagination, sort, loading skeleton
-// Shows empty state when no data
-```
+- **Atoms:** `Button`, `IconButton`, `Input`, `Select`, `Checkbox`, `Switch`, `Avatar`, `Badge`, `Tooltip`, `Spinner`, `Skeleton`.
+- **Molecules:** `FormField` (label + input + error), `StatusBadge` (`status: string, size?: 'sm'|'md'`), `RiskBadge` (`level: RiskLevel, showIcon?: boolean`), `FilterChips`, `DateRangePicker`, `SearchInput`.
+- **Organisms:** `DataTable` (TanStack Table wrapper — `columns, data, pagination, onRowClick, loading`), `ChartCard` (title, subtitle, children for chart), `KPIGrid` (array of cards), `VerificationStepper` (multi-step form UI), `AuditTimeline` (vertical timeline component), `NotificationList`.
+- **Templates & Layouts:** `AppLayout` (Topbar + Sidebar + content), `PageHeader` (`title, description?, actions?`), `ConfirmDialog`, `ModalProvider`, `Drawer/SlideOver`, `EmptyState`.
 
-### 17.4 PageHeader
-```tsx
-// Props: title, description?, actions? (ReactNode for buttons)
-// Consistent page title area used across all pages
-```
+Notes on implementation:
+- `DataTable` should support row virtualization (react-virtual) for large lists, server-side pagination, column customization, and an accessible empty state.
+- `FileUploadZone` should be a robust wrapper around `react-dropzone` with progress, previews, and optional resumable/chunked support for very large files.
+- `GlobalSearch` / Command Palette (`⌘K`) is provided as a global UI primitive in `features/command-palette` and uses a lightweight search index (recent items + remote search API).
+- Centralize icons with an `Icon` component mapping to `lucide-react` to keep consistent sizing and theming.
 
-### 17.5 FilterBar
-```tsx
-// Props: filters (array of filter configs), onFilterChange
-// Renders a row of filter inputs (search, select, date range)
-// Collapsible on mobile
-```
-
-### 17.6 ConfirmDialog
-```tsx
-// Props: open, title, description, confirmLabel, onConfirm, onCancel, variant ('danger' | 'warning' | 'default')
-// Used for all destructive/irreversible actions
-```
-
-### 17.7 EmptyState
-```tsx
-// Props: icon, title, description, action? (button config)
-// Shown when tables/lists have no data
-```
-
-### 17.8 LoadingSkeleton
-```tsx
-// Props: variant ('table' | 'card' | 'list' | 'detail'), rows?
-// Shimmer skeletons matching the shape of real content
-```
-
-### 17.9 FileUploadZone
-```tsx
-// Props: onDrop, accept, maxSize, multiple, label
-// react-dropzone wrapper with styled drag-drop UI
-// Shows upload progress, file previews, error states
-```
-
-### 17.10 AuditTimeline
-```tsx
-// Props: events (array of audit events)
-// Vertical timeline component reused in workflow drawer + client audit tab
-```
-
-### 17.11 GlobalSearch
-```tsx
-// Command palette (⌘K shortcut) powered by shadcn Command component
-// Searches: clients (by name/ID), documents, users
-// Shows recent items when empty
-// Navigates to result on select
-```
 
 ---
 
@@ -2796,6 +2775,69 @@ The backend must apply Passport JWT + RBAC guard on every route:
 ```json
 { "success": true, "data": { "updatedCount": 5 } }
 ```
+
+
+---
+
+### 22.10 Frontend-driven API additions (v2)
+
+These endpoints and minor response shape changes were added to support the new multi-step client UI, bulk document workflows, and real-time notifications used by the frontend.
+
+1) Drafts — save multi-step form progress
+
+POST `/clients/drafts`
+**Description:** Save a partial client payload while the user fills the multi-step form.
+**Auth required:** Yes
+
+Request body (partial client object):
+```json
+{
+  "type": "individual",
+  "personalInfo": { "firstName": "Juan" },
+  "progressStep": 2
+}
+```
+
+Response `201`:
+```json
+{ "success": true, "data": { "draftId": "draft-uuid", "updatedAt": "2024-01-15T10:00:00Z" } }
+```
+
+PATCH `/clients/drafts/:draftId`
+**Description:** Update an existing draft.
+**Request body:** Partial client payload (same shape as POST)
+
+POST `/clients/drafts/:draftId/complete`
+**Description:** Validate and create the final client record from a draft (equivalent to `POST /clients` for completed forms).
+**Response `201`:** Full client object (same shape as `GET /clients/:id`)
+
+2) Bulk document upload
+
+POST `/documents/bulk-upload`
+**Description:** Upload multiple documents in one request. Each file must include metadata mapping it to a `clientId` and `type`.
+**Content-Type:** `multipart/form-data`
+
+Form fields:
+- `files[]` — File[]
+- `metadata` — JSON string: `[ { "fileName": "abc.pdf", "clientId": "uuid", "type": "government_id", "expiryDate": "2025-01-10" }, ... ]`
+
+Response `201`: array of created document objects (same shape as `POST /documents/upload` response)
+
+3) Notifications — real-time stream
+
+GET `/notifications/stream`
+**Description:** Server-Sent Events (SSE) endpoint for real-time notifications. The client opens an EventSource with the authenticated session (JWT via cookie or Authorization header) and receives events:
+
+Event format (data payload is JSON):
+```json
+{ "type": "notification", "id": "uuid", "title": "...", "message": "...", "createdAt": "...", "actionUrl": "/clients/uuid" }
+```
+
+4) Minor response additions
+- `GET /clients/:id` now includes `draftId` when the client was created from a draft (nullable).
+- Risk endpoints (`/risk/clients/:clientId`) include an explicit `riskBreakdown: [{ factor, label, score, weight }]` array to simplify UI rendering.
+
+These additions are additive and backward-compatible; existing endpoints retain their previous behavior unless explicitly replaced by a draft/complete flow.
 
 ---
 

@@ -1,5 +1,5 @@
-import { ModulePage } from "../../../components/ModulePage";
-import { screeningFallback } from "../../../components/fallbacks";
+import { ModulePage } from "../../../src/components/ModulePage";
+import { screeningFallback } from "../../../src/components/fallbacks";
 
 export default function ComplianceDashboardPage() {
   return (
